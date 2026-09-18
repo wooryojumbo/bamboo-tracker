@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111827">
   <title>작은 목표 - 습관 트래커</title>
+  <!-- Firebase SDK 불러오기 -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <style>
     :root{--bg:#f5f6f8;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#111827;--ok:#16a34a;--bamboo:#059669}
     *{box-sizing:border-box}
@@ -50,14 +53,13 @@
     .goal-list{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
     .goal-row{display:flex;gap:8px;align-items:center}
     .goal-row .n{width:28px;text-align:center;color:var(--muted);font-size:12px}
-    
-    /* Chart Section */
     .chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
     .chart-tabs{display:flex;gap:4px;background:#f3f4f6;padding:3px;border-radius:10px}
     .chart-tab{padding:6px 10px;font-size:12px;border-radius:8px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-weight:600}
     .chart-tab.active{background:white;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.1)}
     .chart-container{position:relative;height:180px;width:100%}
     svg.chart-svg{width:100%;height:100%;overflow:visible}
+    .status-badge{font-size:11px;padding:4px 8px;border-radius:6px;background:#e5e7eb;color:#374151}
 
     @media(max-width:768px){
       .stats-container{grid-template-columns:1fr}
@@ -74,7 +76,7 @@
         <h1 id="appTitle" contenteditable="true" title="클릭하여 타이틀 수정">작은 목표</h1>
         <span class="edit-icon" onclick="document.getElementById('appTitle').focus()">✏️</span>
       </div>
-      <div class="subtitle">작게 시작해서, 오늘의 실행을 기록해요.</div>
+      <div class="subtitle">작게 시작해서, 오늘의 실행을 기록해요. <span id="syncStatus" class="status-badge">☁️ 동기화 중...</span></div>
     </div>
     <button class="secondary" id="todayBtn">오늘</button>
   </header>
@@ -109,11 +111,10 @@
     <div class="legend">
       <span>빈칸: 미기록</span>
       <span style="color:var(--ok)">🟢 성공</span>
-      <span>※ 칸 터치 시 전환</span>
+      <span>※ 칸 터치 시 실시간 저장</span>
     </div>
   </section>
 
-  <!-- Growth Line Chart Card -->
   <section class="card">
     <div class="chart-header">
       <h3 style="margin:0;font-size:16px">성장 레벨 추이</h3>
@@ -129,7 +130,7 @@
   </section>
 
   <section class="card">
-    <h3 style="margin:0 0 12px;font-size:16px">목표 설정 (단계별)</h3>
+    <h3 style="margin:0 0 12px;font-size:16px">목표 설정</h3>
     <div class="goal-list" id="goalList"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button id="saveGoals">목표 저장</button>
@@ -139,22 +140,34 @@
 </div>
 
 <script>
-const KEY = "smallGoalPrototypeV4";
+// 🟢 제공해주신 실제 Firebase 키 정보가 정확히 적용되었습니다.
+const firebaseConfig = {
+  apiKey: "AIzaSyC56npCpa-_LbzKfYhL3U0MhdvqSimmLko",
+  authDomain: "bamboo-tracker.firebaseapp.com",
+  projectId: "bamboo-tracker",
+  storageBucket: "bamboo-tracker.firebasestorage.app",
+  messagingSenderId: "583661476297",
+  appId: "1:583661476297:web:c241c961fdd21bca2ff018"
+};
+
+// Firebase 초기화
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const docRef = db.collection("tracker_data").doc("shared_user_data");
+
 const defaultGoals = [
   "헬스장 출석하기", "웨이트 1세트 하고오기", "웨이트 2세트 하고오기",
   "웨이트 5세트 하고오기", "20분 운동하고 오기", "30분 운동하고 오기",
   "40분 운동하고 오기", "50분 운동하고 오기", "운동 1시간 하고 오기", "헬스장 가서 1시간 운동하고 오기"
 ];
 
-let state = JSON.parse(localStorage.getItem(KEY) || "null") || {
+let state = {
   title: "작은 목표",
   start: todayISO(),
   goals: defaultGoals,
   records: {}
 };
 
-if (!state.start) state.start = todayISO();
-if (!state.title) state.title = "작은 목표";
 let currentChartPeriod = 1;
 
 function todayISO() {
@@ -178,8 +191,26 @@ function dow(iso) {
   return ["일", "월", "화", "수", "목", "금", "토"][new Date(iso + "T00:00:00").getDay()];
 }
 
-function save() {
-  localStorage.setItem(KEY, JSON.stringify(state));
+// DB 실시간 수신 설정
+docRef.onSnapshot((doc) => {
+  if (doc.exists) {
+    state = doc.data();
+    if (!state.start) state.start = todayISO();
+    document.getElementById("syncStatus").textContent = "🟢 실시간 연결됨";
+    document.getElementById("syncStatus").style.background = "#dcfce7";
+    document.getElementById("syncStatus").style.color = "#166534";
+  } else {
+    saveToDB();
+  }
+  render();
+}, (err) => {
+  document.getElementById("syncStatus").textContent = "⚠️ 연결 오류";
+  document.getElementById("syncStatus").style.background = "#fee2e2";
+  document.getElementById("syncStatus").style.color = "#991b1b";
+});
+
+function saveToDB() {
+  docRef.set(state);
 }
 
 function cellKey(g, d) { return g + "|" + d; }
@@ -199,12 +230,11 @@ function getBambooStage(avgLvl) {
   return { title: "Lv.10 팬더의 뷔페!", icon: "🐼🎋", desc: "축하해요! 팬더가 맛있게 대나무를 먹어요!" };
 }
 
-// 🔥 핵심 수정: 체크된 레벨 중 '가장 높은 레벨(최댓값)'을 구하도록 변경
 function getDayLevel(dateStr) {
   let maxLvl = 0;
-  for (let i = 0; i < state.goals.length; i++) {
-    if (state.records[cellKey(i, dateStr)] === "O") {
-      maxLvl = i + 1; // 가장 큰 i+1 값이 최종 maxLvl로 저장됨
+  for (let i = 0; i < (state.goals || defaultGoals).length; i++) {
+    if (state.records && state.records[cellKey(i, dateStr)] === "O") {
+      maxLvl = i + 1;
     }
   }
   return maxLvl;
@@ -213,7 +243,7 @@ function getDayLevel(dateStr) {
 function render() {
   const titleEl = document.getElementById("appTitle");
   if (document.activeElement !== titleEl) {
-    titleEl.textContent = state.title;
+    titleEl.textContent = state.title || "작은 목표";
   }
 
   document.getElementById("startDate").value = state.start;
@@ -221,10 +251,10 @@ function render() {
 
   let h = "<thead><tr><th>항목</th>" + dates.map(d => `<th><div class="date">${fmt(d)}</div><div class="dow">${dow(d)}</div></th>`).join("") + "</tr></thead><tbody>";
 
-  state.goals.forEach((g, i) => {
+  (state.goals || defaultGoals).forEach((g, i) => {
     h += `<tr><td><span class="goal-num">목표${i + 1}</span><span class="goal-name">${escapeHtml(g)}</span></td>`;
     dates.forEach(d => {
-      const v = state.records[cellKey(i, d)] || "";
+      const v = (state.records && state.records[cellKey(i, d)]) || "";
       h += `<td class="cell ${v === "O" ? "ok" : ""}" data-g="${i}" data-d="${d}">${v === "O" ? "🟢" : ""}</td>`;
     });
     h += "</tr>";
@@ -233,12 +263,12 @@ function render() {
   document.getElementById("tracker").innerHTML = h;
 
   document.querySelectorAll(".cell").forEach(el => el.onclick = () => {
+    if (!state.records) state.records = {};
     const k = cellKey(+el.dataset.g, el.dataset.d);
     const v = state.records[k] || "";
     state.records[k] = v === "" ? "O" : "";
     if (!state.records[k]) delete state.records[k];
-    save();
-    render();
+    saveToDB();
   });
 
   renderGoals();
@@ -247,23 +277,20 @@ function render() {
 }
 
 function renderStats(currentWeekDates) {
-  const vals = Object.values(state.records);
+  const vals = Object.values(state.records || {});
   document.getElementById("okCount").textContent = vals.filter(v => v === "O").length;
 
-  const dates = new Set(Object.keys(state.records).filter(k => state.records[k]).map(k => k.split("|")[1]));
+  const dates = new Set(Object.keys(state.records || {}).filter(k => state.records[k]).map(k => k.split("|")[1]));
   document.getElementById("daysCount").textContent = dates.size;
 
-  // 오늘 달성 최고 단계
   const todayLvl = getDayLevel(todayISO());
   document.getElementById("todayLevel").textContent = "Lv. " + todayLvl;
 
-  // 이번 주(화면에 보이는 7일) 각 날의 '최고 레벨'들을 기반으로 평균 측정
   let sumLvl = 0;
   currentWeekDates.forEach(d => { sumLvl += getDayLevel(d); });
   const avgLvl = (sumLvl / 7).toFixed(1);
   document.getElementById("avgLevel").textContent = "Lv. " + avgLvl;
 
-  // 캐릭터 카드 업데이트
   const stage = getBambooStage(parseFloat(avgLvl));
   document.getElementById("growthStage").textContent = stage.title;
   document.getElementById("growthAvatar").textContent = stage.icon;
@@ -333,7 +360,7 @@ function renderChart() {
 }
 
 function renderGoals() {
-  document.getElementById("goalList").innerHTML = state.goals.map((g, i) => 
+  document.getElementById("goalList").innerHTML = (state.goals || defaultGoals).map((g, i) => 
     `<div class="goal-row"><div class="n">${i + 1}</div><input type="text" id="g${i}" value="${escapeAttr(g)}" maxlength="40"></div>`
   ).join("");
 }
@@ -346,9 +373,8 @@ function escapeAttr(s) { return escapeHtml(s); }
 
 const titleEl = document.getElementById("appTitle");
 titleEl.onblur = () => {
-  const newTitle = titleEl.textContent.trim() || "작은 목표";
-  state.title = newTitle;
-  save();
+  state.title = titleEl.textContent.trim() || "작은 목표";
+  saveToDB();
 };
 titleEl.onkeydown = (e) => {
   if (e.key === "Enter") {
@@ -357,10 +383,10 @@ titleEl.onkeydown = (e) => {
   }
 };
 
-document.getElementById("startDate").onchange = e => { state.start = e.target.value; save(); render(); };
-document.getElementById("prevBtn").onclick = () => { state.start = addDays(state.start, -7); save(); render(); };
-document.getElementById("nextBtn").onclick = () => { state.start = addDays(state.start, 7); save(); render(); };
-document.getElementById("todayBtn").onclick = () => { state.start = todayISO(); save(); render(); };
+document.getElementById("startDate").onchange = e => { state.start = e.target.value; saveToDB(); };
+document.getElementById("prevBtn").onclick = () => { state.start = addDays(state.start, -7); saveToDB(); };
+document.getElementById("nextBtn").onclick = () => { state.start = addDays(state.start, 7); saveToDB(); };
+document.getElementById("todayBtn").onclick = () => { state.start = todayISO(); saveToDB(); };
 
 document.querySelectorAll(".chart-tab").forEach(tab => {
   tab.onclick = (e) => {
@@ -372,22 +398,19 @@ document.querySelectorAll(".chart-tab").forEach(tab => {
 });
 
 document.getElementById("saveGoals").onclick = () => {
-  state.goals = state.goals.map((_, i) => document.getElementById("g" + i).value.trim() || defaultGoals[i]);
-  save();
-  render();
-  alert("목표가 저장됐어요.");
+  state.goals = (state.goals || defaultGoals).map((_, i) => document.getElementById("g" + i).value.trim() || defaultGoals[i]);
+  saveToDB();
+  alert("목표가 실시간 데이터베이스에 저장되었어요.");
 };
 
 document.getElementById("resetBtn").onclick = () => {
   if (confirm("모든 🟢 기록을 삭제할까요? 목표 설정 및 타이틀은 유지됩니다.")) {
     state.records = {};
-    save();
-    render();
+    saveToDB();
   }
 };
 
 window.onresize = renderChart;
-render();
 </script>
 </body>
 </html>
