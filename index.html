@@ -8,7 +8,7 @@
 
   <!-- 📱 스마트폰/태블릿 홈 화면 바로가기 아이콘 지정 -->
   <link rel="apple-touch-icon" href="icon2.png">
-  <link rel="icon2" type="image/png" href="icon2.png">
+  <link rel="icon" type="image/png" href="icon2.png">
 
   <!-- Firebase SDK 불러오기 -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -162,14 +162,45 @@ const defaultGoals = [
   "40분 운동하고 오기", "50분 운동하고 오기", "운동 1시간 하고 오기", "헬스장 가서 1시간 운동하고 오기"
 ];
 
-// ⭐ 핵심 수정: 입력받은 날짜가 포함된 주의 '월요일' ISO 날짜를 구함
-function getMondayISO(isoOrDate) {
-  const d = new Date(isoOrDate + (typeof isoOrDate === 'string' && !isoOrDate.includes('T') ? 'T00:00:00' : ''));
-  const day = d.getDay(); // 0(일), 1(월), 2(화), 3(수), 4(목), 5(금), 6(토)
-  const diff = d.getDate() - (day === 0 ? 6 : day - 1); // 월요일을 시작점(0)으로 맞춤
-  d.setDate(diff);
+function todayISO() {
+  const d = new Date();
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 10);
+}
+
+// 주어진 날짜 기준 '월요일' ISO 날짜 강제 반환
+function getMondayISO(isoStr) {
+  const parts = isoStr.split('-');
+  const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  const day = d.getDay(); // 0:일, 1:월, 2:화, 3:수, 4:목, 5:금, 6:토
+  const diff = d.getDate() - (day === 0 ? 6 : day - 1);
+  const monday = new Date(d.setDate(diff));
+  
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, '0');
+  const date = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${m}-${date}`;
+}
+
+function addDays(isoStr, n) {
+  const parts = isoStr.split('-');
+  const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  d.setDate(d.getDate() + n);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const date = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${date}`;
+}
+
+function fmt(isoStr) {
+  const parts = isoStr.split('-');
+  return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
+}
+
+function dow(isoStr) {
+  const parts = isoStr.split('-');
+  const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  return ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
 }
 
 let state = {
@@ -181,37 +212,14 @@ let state = {
 
 let currentChartPeriod = 1;
 
-function todayISO() {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 10);
-}
-
-function addDays(iso, n) {
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-function fmt(iso) {
-  const d = new Date(iso + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-// ⭐ 요일 표시
-function dow(iso) {
-  return ["일", "월", "화", "수", "목", "금", "토"][new Date(iso + "T00:00:00").getDay()];
-}
-
 docRef.onSnapshot((doc) => {
   if (doc.exists) {
     const data = doc.data();
     state.title = data.title || "작은 목표";
     state.goals = data.goals || defaultGoals;
     state.records = data.records || {};
-    if (data.start) {
-      state.start = getMondayISO(data.start);
-    }
+    // 데이터베이스에 입력되어 있던 과거 start 값을 항상 이번 주 월요일 혹은 이전/다음 주 월요일 값으로 보정
+    state.start = data.start ? getMondayISO(data.start) : getMondayISO(todayISO());
     document.getElementById("syncStatus").textContent = "🟢 실시간 연결됨";
     document.getElementById("syncStatus").style.background = "#dcfce7";
     document.getElementById("syncStatus").style.color = "#166534";
@@ -262,11 +270,11 @@ function render() {
     titleEl.textContent = state.title || "작은 목표";
   }
 
-  // ⭐ 무조건 월요일부터 시작하여 7일(월~일) 생성
+  // ⭐ 무조건 시작일은 월요일부터 계산되도록 설정
   state.start = getMondayISO(state.start);
   const dates = Array.from({length: 7}, (_, i) => addDays(state.start, i));
 
-  // 이번 주 표시범위 텍스트 업데이트 (월요일 ~ 일요일)
+  // 이번 주 범위 텍스트 (월 ~ 일)
   document.getElementById("currentWeekRange").textContent = `${fmt(dates[0])}(월) ~ ${fmt(dates[6])}(일)`;
 
   let h = "<thead><tr><th>항목</th>" + dates.map(d => `<th><div class="date">${fmt(d)}</div><div class="dow">${dow(d)}</div></th>`).join("") + "</tr></thead><tbody>";
