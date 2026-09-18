@@ -7,8 +7,8 @@
   <title>작은 목표 - 습관 트래커</title>
 
   <!-- 📱 스마트폰/태블릿 홈 화면 바로가기 아이콘 지정 -->
-  <link rel="apple-touch-icon" href="icon2.png">
-  <link rel="icon2" type="image/png" href="icon2.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" type="image/png" href="icon.png">
 
   <!-- Firebase SDK 불러오기 -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -27,10 +27,9 @@
     button{border:0;border-radius:12px;padding:10px 13px;background:#111827;color:white;font-weight:700;cursor:pointer}
     button.secondary{background:#fff;color:var(--text);border:1px solid var(--line)}
     .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.03)}
-    .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .controls{display:flex;gap:8px;align-items:center;justify-content:space-between}
     .controls label{font-size:13px;color:var(--muted)}
-    input[type=date],input[type=text]{border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;background:white}
-    input[type=text]{width:100%}
+    input[type=text]{border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;background:white;width:100%}
     .stats-container{display:grid;grid-template-columns:1fr 220px;gap:12px}
     .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
     .stat{background:#f9fafb;border-radius:14px;padding:12px;text-align:center}
@@ -83,15 +82,14 @@
       </div>
       <div class="subtitle">작게 시작해서, 오늘의 실행을 기록해요. <span id="syncStatus" class="status-badge">☁️ 동기화 중...</span></div>
     </div>
-    <button class="secondary" id="todayBtn">오늘</button>
+    <button class="secondary" id="todayBtn">이번 주</button>
   </header>
 
   <section class="card">
     <div class="controls">
-      <label>시작일</label>
-      <input type="date" id="startDate">
-      <button id="prevBtn" class="secondary">← 1주</button>
-      <button id="nextBtn" class="secondary">1주 →</button>
+      <button id="prevBtn" class="secondary">← 1주 전</button>
+      <span id="currentWeekRange" style="font-weight: 600; font-size: 14px; color: var(--text);"></span>
+      <button id="nextBtn" class="secondary">1주 후 →</button>
     </div>
   </section>
 
@@ -164,9 +162,19 @@ const defaultGoals = [
   "40분 운동하고 오기", "50분 운동하고 오기", "운동 1시간 하고 오기", "헬스장 가서 1시간 운동하고 오기"
 ];
 
+// 어떤 날짜가 주어져도 해당 주의 '월요일' ISO 날짜 구하기
+function getMondayISO(dateObj) {
+  const d = new Date(dateObj);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // 일요일이면 -6, 월요일부터는 +1 기준
+  d.setDate(diff);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+
 let state = {
   title: "작은 목표",
-  start: todayISO(),
+  start: getMondayISO(new Date()),
   goals: defaultGoals,
   records: {}
 };
@@ -196,8 +204,13 @@ function dow(iso) {
 
 docRef.onSnapshot((doc) => {
   if (doc.exists) {
-    state = doc.data();
-    if (!state.start) state.start = todayISO();
+    const data = doc.data();
+    state.title = data.title || "작은 목표";
+    state.goals = data.goals || defaultGoals;
+    state.records = data.records || {};
+    if (data.start) {
+      state.start = getMondayISO(data.start);
+    }
     document.getElementById("syncStatus").textContent = "🟢 실시간 연결됨";
     document.getElementById("syncStatus").style.background = "#dcfce7";
     document.getElementById("syncStatus").style.color = "#166534";
@@ -248,8 +261,12 @@ function render() {
     titleEl.textContent = state.title || "작은 목표";
   }
 
-  document.getElementById("startDate").value = state.start;
+  // 월요일부터 7일 생성
+  state.start = getMondayISO(state.start);
   const dates = Array.from({length: 7}, (_, i) => addDays(state.start, i));
+
+  // 이번 주 표시범위 텍스트 업데이트
+  document.getElementById("currentWeekRange").textContent = `${fmt(dates[0])} ~ ${fmt(dates[6])}`;
 
   let h = "<thead><tr><th>항목</th>" + dates.map(d => `<th><div class="date">${fmt(d)}</div><div class="dow">${dow(d)}</div></th>`).join("") + "</tr></thead><tbody>";
 
@@ -385,10 +402,9 @@ titleEl.onkeydown = (e) => {
   }
 };
 
-document.getElementById("startDate").onchange = e => { state.start = e.target.value; saveToDB(); };
 document.getElementById("prevBtn").onclick = () => { state.start = addDays(state.start, -7); saveToDB(); };
 document.getElementById("nextBtn").onclick = () => { state.start = addDays(state.start, 7); saveToDB(); };
-document.getElementById("todayBtn").onclick = () => { state.start = todayISO(); saveToDB(); };
+document.getElementById("todayBtn").onclick = () => { state.start = getMondayISO(new Date()); saveToDB(); };
 
 document.querySelectorAll(".chart-tab").forEach(tab => {
   tab.onclick = (e) => {
