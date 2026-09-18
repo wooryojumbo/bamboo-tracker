@@ -162,11 +162,11 @@ const defaultGoals = [
   "40분 운동하고 오기", "50분 운동하고 오기", "운동 1시간 하고 오기", "헬스장 가서 1시간 운동하고 오기"
 ];
 
-// 어떤 날짜가 주어져도 해당 주의 '월요일' ISO 날짜 구하기
-function getMondayISO(dateObj) {
-  const d = new Date(dateObj);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // 일요일이면 -6, 월요일부터는 +1 기준
+// ⭐ 핵심 수정: 입력받은 날짜가 포함된 주의 '월요일' ISO 날짜를 구함
+function getMondayISO(isoOrDate) {
+  const d = new Date(isoOrDate + (typeof isoOrDate === 'string' && !isoOrDate.includes('T') ? 'T00:00:00' : ''));
+  const day = d.getDay(); // 0(일), 1(월), 2(화), 3(수), 4(목), 5(금), 6(토)
+  const diff = d.getDate() - (day === 0 ? 6 : day - 1); // 월요일을 시작점(0)으로 맞춤
   d.setDate(diff);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 10);
@@ -174,7 +174,7 @@ function getMondayISO(dateObj) {
 
 let state = {
   title: "작은 목표",
-  start: getMondayISO(new Date()),
+  start: getMondayISO(todayISO()),
   goals: defaultGoals,
   records: {}
 };
@@ -198,6 +198,7 @@ function fmt(iso) {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+// ⭐ 요일 표시
 function dow(iso) {
   return ["일", "월", "화", "수", "목", "금", "토"][new Date(iso + "T00:00:00").getDay()];
 }
@@ -261,12 +262,12 @@ function render() {
     titleEl.textContent = state.title || "작은 목표";
   }
 
-  // 월요일부터 7일 생성
+  // ⭐ 무조건 월요일부터 시작하여 7일(월~일) 생성
   state.start = getMondayISO(state.start);
   const dates = Array.from({length: 7}, (_, i) => addDays(state.start, i));
 
-  // 이번 주 표시범위 텍스트 업데이트
-  document.getElementById("currentWeekRange").textContent = `${fmt(dates[0])} ~ ${fmt(dates[6])}`;
+  // 이번 주 표시범위 텍스트 업데이트 (월요일 ~ 일요일)
+  document.getElementById("currentWeekRange").textContent = `${fmt(dates[0])}(월) ~ ${fmt(dates[6])}(일)`;
 
   let h = "<thead><tr><th>항목</th>" + dates.map(d => `<th><div class="date">${fmt(d)}</div><div class="dow">${dow(d)}</div></th>`).join("") + "</tr></thead><tbody>";
 
@@ -404,7 +405,7 @@ titleEl.onkeydown = (e) => {
 
 document.getElementById("prevBtn").onclick = () => { state.start = addDays(state.start, -7); saveToDB(); };
 document.getElementById("nextBtn").onclick = () => { state.start = addDays(state.start, 7); saveToDB(); };
-document.getElementById("todayBtn").onclick = () => { state.start = getMondayISO(new Date()); saveToDB(); };
+document.getElementById("todayBtn").onclick = () => { state.start = getMondayISO(todayISO()); saveToDB(); };
 
 document.querySelectorAll(".chart-tab").forEach(tab => {
   tab.onclick = (e) => {
