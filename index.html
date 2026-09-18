@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>작은 목표 - 습관 트래커</title>
+  <style>
+    :root{--bg:#f5f6f8;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#111827;--ok:#16a34a;--bamboo:#059669}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif}
+    .app{max-width:1100px;margin:auto;padding:18px 14px 40px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+    .title-area{display:flex;align-items:center;gap:8px}
+    h1{font-size:24px;margin:0;outline:none;border-bottom:2px dashed transparent;padding:2px 4px;border-radius:4px;transition:all 0.2s}
+    h1:hover, h1:focus{border-color:var(--muted);background:#fff}
+    .edit-icon{font-size:14px;color:var(--muted);cursor:pointer}
+    .subtitle{font-size:13px;color:var(--muted);margin-top:2px}
+    button{border:0;border-radius:12px;padding:10px 13px;background:#111827;color:white;font-weight:700;cursor:pointer}
+    button.secondary{background:#fff;color:var(--text);border:1px solid var(--line)}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.03)}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .controls label{font-size:13px;color:var(--muted)}
+    input[type=date],input[type=text]{border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;background:white}
+    input[type=text]{width:100%}
+    .stats-container{display:grid;grid-template-columns:1fr 220px;gap:12px}
+    .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    .stat{background:#f9fafb;border-radius:14px;padding:12px;text-align:center}
+    .stat b{display:block;font-size:20px;color:var(--accent)}
+    .stat span{font-size:11px;color:var(--muted)}
+    .growth-card{background:linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);border:1px solid #a7f3d0;border-radius:14px;padding:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+    .growth-stage{font-size:13px;font-weight:700;color:var(--bamboo);margin-bottom:4px}
+    .growth-avatar{font-size:38px;line-height:1.2;margin:4px 0}
+    .growth-desc{font-size:11px;color:#047857}
+    .table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:14px}
+    table{border-collapse:separate;border-spacing:0;min-width:720px;width:100%;font-size:13px}
+    th,td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);height:52px;text-align:center;background:white}
+    th{height:58px;background:#f9fafb;font-weight:700;position:sticky;top:0;z-index:2}
+    th:first-child,td:first-child{position:sticky;left:0;z-index:3;background:white;text-align:left}
+    th:first-child{z-index:4;background:#f9fafb;width:210px;min-width:210px}
+    td:first-child{width:210px;min-width:210px;padding:8px 10px}
+    th:not(:first-child),td:not(:first-child){width:64px;min-width:64px}
+    tr:last-child td{border-bottom:0} th:last-child,td:last-child{border-right:0}
+    .date{font-size:12px}.dow{font-size:11px;color:var(--muted)}
+    .goal-num{color:var(--muted);font-size:11px;margin-right:5px}
+    .goal-name{font-weight:600}
+    .cell{font-size:23px;font-weight:800;user-select:none;-webkit-tap-highlight-color:transparent;cursor:pointer}
+    .cell.ok{color:var(--ok)}
+    .legend{display:flex;gap:12px;font-size:12px;color:var(--muted);margin-top:10px}
+    .goal-list{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    .goal-row{display:flex;gap:8px;align-items:center}
+    .goal-row .n{width:28px;text-align:center;color:var(--muted);font-size:12px}
+    
+    /* Chart Section */
+    .chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .chart-tabs{display:flex;gap:4px;background:#f3f4f6;padding:3px;border-radius:10px}
+    .chart-tab{padding:6px 10px;font-size:12px;border-radius:8px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-weight:600}
+    .chart-tab.active{background:white;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+    .chart-container{position:relative;height:180px;width:100%}
+    svg.chart-svg{width:100%;height:100%;overflow:visible}
+
+    @media(max-width:768px){
+      .stats-container{grid-template-columns:1fr}
+      .growth-card{padding:16px}
+      .goal-list{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <div class="title-area">
+        <h1 id="appTitle" contenteditable="true" title="클릭하여 타이틀 수정">작은 목표</h1>
+        <span class="edit-icon" onclick="document.getElementById('appTitle').focus()">✏️</span>
+      </div>
+      <div class="subtitle">작게 시작해서, 오늘의 실행을 기록해요.</div>
+    </div>
+    <button class="secondary" id="todayBtn">오늘</button>
+  </header>
+
+  <section class="card">
+    <div class="controls">
+      <label>시작일</label>
+      <input type="date" id="startDate">
+      <button id="prevBtn" class="secondary">← 1주</button>
+      <button id="nextBtn" class="secondary">1주 →</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="stats-container">
+      <div class="stats">
+        <div class="stat"><b id="daysCount">0</b><span>총 기록 날짜</span></div>
+        <div class="stat"><b id="okCount">0</b><span>총 🟢 개수</span></div>
+        <div class="stat"><b id="todayLevel">Lv. 0</b><span>오늘 달성 단계</span></div>
+        <div class="stat"><b id="avgLevel" style="color:var(--bamboo);">Lv. 0.0</b><span>이번 주 평균 단계</span></div>
+      </div>
+      <div class="growth-card">
+        <div class="growth-stage" id="growthStage">Lv.0 땅 속 씨앗</div>
+        <div class="growth-avatar" id="growthAvatar">🌱</div>
+        <div class="growth-desc" id="growthDesc">이번 주 평균 성장을 기다리고 있어요!</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="table-wrap"><table id="tracker"></table></div>
+    <div class="legend">
+      <span>빈칸: 미기록</span>
+      <span style="color:var(--ok)">🟢 성공</span>
+      <span>※ 칸 터치 시 전환</span>
+    </div>
+  </section>
+
+  <!-- Growth Line Chart Card -->
+  <section class="card">
+    <div class="chart-header">
+      <h3 style="margin:0;font-size:16px">성장 레벨 추이</h3>
+      <div class="chart-tabs">
+        <button class="chart-tab active" data-period="1">1주(7일)</button>
+        <button class="chart-tab" data-period="4">4주(1달)</button>
+        <button class="chart-tab" data-period="12">12주(3달)</button>
+      </div>
+    </div>
+    <div class="chart-container" id="chartBox">
+      <svg class="chart-svg" id="chartSvg"></svg>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 style="margin:0 0 12px;font-size:16px">목표 설정 (단계별)</h3>
+    <div class="goal-list" id="goalList"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="saveGoals">목표 저장</button>
+      <button id="resetBtn" class="secondary">기록 전체 초기화</button>
+    </div>
+  </section>
+</div>
+
+<script>
+const KEY = "smallGoalPrototypeV4";
+const defaultGoals = [
+  "헬스장 출석하기", "웨이트 1세트 하고오기", "웨이트 2세트 하고오기",
+  "웨이트 5세트 하고오기", "20분 운동하고 오기", "30분 운동하고 오기",
+  "40분 운동하고 오기", "50분 운동하고 오기", "운동 1시간 하고 오기", "헬스장 가서 1시간 운동하고 오기"
+];
+
+let state = JSON.parse(localStorage.getItem(KEY) || "null") || {
+  title: "작은 목표",
+  start: todayISO(),
+  goals: defaultGoals,
+  records: {}
+};
+
+if (!state.start) state.start = todayISO();
+if (!state.title) state.title = "작은 목표";
+let currentChartPeriod = 1;
+
+function todayISO() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(iso, n) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmt(iso) {
+  const d = new Date(iso + "T00:00:00");
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function dow(iso) {
+  return ["일", "월", "화", "수", "목", "금", "토"][new Date(iso + "T00:00:00").getDay()];
+}
+
+function save() {
+  localStorage.setItem(KEY, JSON.stringify(state));
+}
+
+function cellKey(g, d) { return g + "|" + d; }
+
+function getBambooStage(avgLvl) {
+  const lvl = Math.round(avgLvl);
+  if (lvl <= 0) return { title: "Lv.0 땅 속 씨앗", icon: "🌱", desc: "시작이 반이에요! 첫 발을 내딛어봐요." };
+  if (lvl === 1) return { title: "Lv.1 돋아나는 새싹", icon: "🌿", desc: "귀여운 대나무 새싹이 고개를 내밀었어요!" };
+  if (lvl === 2) return { title: "Lv.2 아기 대나무", icon: "🎍", desc: "줄기가 곧게 자라나고 있어요." };
+  if (lvl === 3) return { title: "Lv.3 어린 대나무", icon: "🎋", desc: "바람에도 꺾이지 않는 탄력이 생겼어요." };
+  if (lvl === 4) return { title: "Lv.4 쑥쑥 자라는 대나무", icon: "🎋", desc: "대나무 마디가 더욱 튼튼해집니다." };
+  if (lvl === 5) return { title: "Lv.5 푸른 대나무", icon: "🎍", desc: "울창한 초록빛을 띠기 시작했어요." };
+  if (lvl === 6) return { title: "Lv.6 튼튼한 대나무", icon: "🎋", desc: "이제 주변에서도 알아채는 실행력!" };
+  if (lvl === 7) return { title: "Lv.7 키 큰 대나무", icon: "🎋", desc: "하늘 높이 쭉쭉 솟아오릅니다." };
+  if (lvl === 8) return { title: "Lv.8 대나무 숲", icon: "🎋", desc: "멋진 대나무 숲이 완성되어 가요." };
+  if (lvl === 9) return { title: "Lv.9 울창한 대나무", icon: "🎋", desc: "팬더가 대나무 향기를 맡고 찾아왔어요!" };
+  return { title: "Lv.10 팬더의 뷔페!", icon: "🐼🎋", desc: "축하해요! 팬더가 맛있게 대나무를 먹어요!" };
+}
+
+// 🔥 핵심 수정: 체크된 레벨 중 '가장 높은 레벨(최댓값)'을 구하도록 변경
+function getDayLevel(dateStr) {
+  let maxLvl = 0;
+  for (let i = 0; i < state.goals.length; i++) {
+    if (state.records[cellKey(i, dateStr)] === "O") {
+      maxLvl = i + 1; // 가장 큰 i+1 값이 최종 maxLvl로 저장됨
+    }
+  }
+  return maxLvl;
+}
+
+function render() {
+  const titleEl = document.getElementById("appTitle");
+  if (document.activeElement !== titleEl) {
+    titleEl.textContent = state.title;
+  }
+
+  document.getElementById("startDate").value = state.start;
+  const dates = Array.from({length: 7}, (_, i) => addDays(state.start, i));
+
+  let h = "<thead><tr><th>항목</th>" + dates.map(d => `<th><div class="date">${fmt(d)}</div><div class="dow">${dow(d)}</div></th>`).join("") + "</tr></thead><tbody>";
+
+  state.goals.forEach((g, i) => {
+    h += `<tr><td><span class="goal-num">목표${i + 1}</span><span class="goal-name">${escapeHtml(g)}</span></td>`;
+    dates.forEach(d => {
+      const v = state.records[cellKey(i, d)] || "";
+      h += `<td class="cell ${v === "O" ? "ok" : ""}" data-g="${i}" data-d="${d}">${v === "O" ? "🟢" : ""}</td>`;
+    });
+    h += "</tr>";
+  });
+  h += "</tbody>";
+  document.getElementById("tracker").innerHTML = h;
+
+  document.querySelectorAll(".cell").forEach(el => el.onclick = () => {
+    const k = cellKey(+el.dataset.g, el.dataset.d);
+    const v = state.records[k] || "";
+    state.records[k] = v === "" ? "O" : "";
+    if (!state.records[k]) delete state.records[k];
+    save();
+    render();
+  });
+
+  renderGoals();
+  renderStats(dates);
+  renderChart();
+}
+
+function renderStats(currentWeekDates) {
+  const vals = Object.values(state.records);
+  document.getElementById("okCount").textContent = vals.filter(v => v === "O").length;
+
+  const dates = new Set(Object.keys(state.records).filter(k => state.records[k]).map(k => k.split("|")[1]));
+  document.getElementById("daysCount").textContent = dates.size;
+
+  // 오늘 달성 최고 단계
+  const todayLvl = getDayLevel(todayISO());
+  document.getElementById("todayLevel").textContent = "Lv. " + todayLvl;
+
+  // 이번 주(화면에 보이는 7일) 각 날의 '최고 레벨'들을 기반으로 평균 측정
+  let sumLvl = 0;
+  currentWeekDates.forEach(d => { sumLvl += getDayLevel(d); });
+  const avgLvl = (sumLvl / 7).toFixed(1);
+  document.getElementById("avgLevel").textContent = "Lv. " + avgLvl;
+
+  // 캐릭터 카드 업데이트
+  const stage = getBambooStage(parseFloat(avgLvl));
+  document.getElementById("growthStage").textContent = stage.title;
+  document.getElementById("growthAvatar").textContent = stage.icon;
+  document.getElementById("growthDesc").textContent = stage.desc;
+}
+
+function renderChart() {
+  const svg = document.getElementById("chartSvg");
+  const box = document.getElementById("chartBox");
+  const width = box.clientWidth || 600;
+  const height = box.clientHeight || 180;
+  const padding = { top: 20, right: 20, bottom: 30, left: 30 };
+
+  let dataPoints = [];
+  if (currentChartPeriod === 1) {
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(state.start, i);
+      dataPoints.push({ label: fmt(d), value: getDayLevel(d) });
+    }
+  } else if (currentChartPeriod === 4) {
+    for (let w = 3; w >= 0; w--) {
+      const weekStart = addDays(state.start, -w * 7);
+      let sum = 0;
+      for (let i = 0; i < 7; i++) sum += getDayLevel(addDays(weekStart, i));
+      dataPoints.push({ label: `${fmt(weekStart)}~`, value: parseFloat((sum / 7).toFixed(1)) });
+    }
+  } else {
+    for (let w = 11; w >= 0; w--) {
+      const weekStart = addDays(state.start, -w * 7);
+      let sum = 0;
+      for (let i = 0; i < 7; i++) sum += getDayLevel(addDays(weekStart, i));
+      dataPoints.push({ label: `${fmt(weekStart).split('/')[0]}월${Math.ceil(new Date(weekStart).getDate()/7)}주`, value: parseFloat((sum / 7).toFixed(1)) });
+    }
+  }
+
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+  const maxVal = 10;
+
+  const points = dataPoints.map((pt, idx) => {
+    const x = padding.left + (chartW / (dataPoints.length - 1 || 1)) * idx;
+    const y = padding.top + chartH - (pt.value / maxVal) * chartH;
+    return { x, y, ...pt };
+  });
+
+  let svgContent = `
+    <line x1="${padding.left}" y1="${padding.top}" x2="${width - padding.right}" y2="${padding.top}" stroke="#e5e7eb" stroke-dasharray="4" />
+    <text x="${padding.left - 5}" y="${padding.top + 4}" font-size="10" fill="#9ca3af" text-anchor="end">10</text>
+    <line x1="${padding.left}" y1="${padding.top + chartH/2}" x2="${width - padding.right}" y2="${padding.top + chartH/2}" stroke="#e5e7eb" stroke-dasharray="4" />
+    <text x="${padding.left - 5}" y="${padding.top + chartH/2 + 4}" font-size="10" fill="#9ca3af" text-anchor="end">5</text>
+  `;
+
+  if (points.length > 0) {
+    const pathD = points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(" ");
+    svgContent += `<path d="${pathD}" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+
+    points.forEach(p => {
+      svgContent += `
+        <circle cx="${p.x}" cy="${p.y}" r="4" fill="#059669" stroke="#ffffff" stroke-width="2" />
+        <text x="${p.x}" y="${p.y - 8}" font-size="11" font-weight="bold" fill="#047857" text-anchor="middle">${p.value}</text>
+        <text x="${p.x}" y="${height - 5}" font-size="10" fill="#6b7280" text-anchor="middle">${p.label}</text>
+      `;
+    });
+  }
+
+  svg.innerHTML = svgContent;
+}
+
+function renderGoals() {
+  document.getElementById("goalList").innerHTML = state.goals.map((g, i) => 
+    `<div class="goal-row"><div class="n">${i + 1}</div><input type="text" id="g${i}" value="${escapeAttr(g)}" maxlength="40"></div>`
+  ).join("");
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, m => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[m]));
+}
+
+function escapeAttr(s) { return escapeHtml(s); }
+
+const titleEl = document.getElementById("appTitle");
+titleEl.onblur = () => {
+  const newTitle = titleEl.textContent.trim() || "작은 목표";
+  state.title = newTitle;
+  save();
+};
+titleEl.onkeydown = (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    titleEl.blur();
+  }
+};
+
+document.getElementById("startDate").onchange = e => { state.start = e.target.value; save(); render(); };
+document.getElementById("prevBtn").onclick = () => { state.start = addDays(state.start, -7); save(); render(); };
+document.getElementById("nextBtn").onclick = () => { state.start = addDays(state.start, 7); save(); render(); };
+document.getElementById("todayBtn").onclick = () => { state.start = todayISO(); save(); render(); };
+
+document.querySelectorAll(".chart-tab").forEach(tab => {
+  tab.onclick = (e) => {
+    document.querySelectorAll(".chart-tab").forEach(t => t.classList.remove("active"));
+    e.target.classList.add("active");
+    currentChartPeriod = parseInt(e.target.dataset.period);
+    renderChart();
+  };
+});
+
+document.getElementById("saveGoals").onclick = () => {
+  state.goals = state.goals.map((_, i) => document.getElementById("g" + i).value.trim() || defaultGoals[i]);
+  save();
+  render();
+  alert("목표가 저장됐어요.");
+};
+
+document.getElementById("resetBtn").onclick = () => {
+  if (confirm("모든 🟢 기록을 삭제할까요? 목표 설정 및 타이틀은 유지됩니다.")) {
+    state.records = {};
+    save();
+    render();
+  }
+};
+
+window.onresize = renderChart;
+render();
+</script>
+</body>
+</html>
